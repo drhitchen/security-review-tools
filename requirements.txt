@@ -1,0 +1,9 @@
+gitingest
+prowler
+python-dotenv
+pyyaml
+requests
+scoutsuite
+selenium
+tabulate
+webdriver-manager
