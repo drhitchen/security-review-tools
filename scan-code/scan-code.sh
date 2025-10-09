@@ -236,7 +236,7 @@ run_kics() {
     local outbase="$SCANS_DIR/${REPO_BASENAME}.kics"
     log "Running: KICS on $REPO"
 
-    local cmd="kics scan -p \"${PWD}/$REPO\" -o \"$SCANS_DIR\" --queries-path \"$queries_path\" --no-progress --output-name \"${REPO_BASENAME}.kics\" \\
+    local cmd="KICS_COLLECT_TELEMETRY=0 kics scan -p \"${PWD}/$REPO\" -o \"$SCANS_DIR\" --queries-path \"$queries_path\" --no-progress --output-name \"${REPO_BASENAME}.kics\" \\
         --preview-lines 30 --report-formats csv,html,json,sarif"
     log "Debug: Executing command -> $cmd"
     eval "$cmd"
@@ -259,6 +259,7 @@ run_semgrep() {
         --quiet --dataflow-traces --no-force-color \
         --text --output=\"${outbase}.txt\" \
         --json-output=\"${outbase}.json\" \
+        --metrics=\"off\" \
         --sarif-output=\"${outbase}.sarif\""
     log "Debug: Executing command -> $cmd"
     eval "$cmd"
