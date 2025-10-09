@@ -50,18 +50,11 @@ done
 
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
 
-if [ -n "$REPO" ]; then
-    LOCAL_OUTPUT="${OUTPUT_BASE:-$(pwd)/output}/code-scans/$REPO"
-    SCANS_DIR="$LOCAL_OUTPUT/scans"
-    SUMMARIES_DIR="$LOCAL_OUTPUT/summaries"
-    LOGS_DIR="$LOCAL_OUTPUT/logs"
-else
-    LOCAL_OUTPUT="${OUTPUT_BASE:-$(pwd)/output}"
-    # If no repo is provided, just assume the current folder for scanning
-    SCANS_DIR="$(pwd)"
-    SUMMARIES_DIR="$LOCAL_OUTPUT"
-    LOGS_DIR="$LOCAL_OUTPUT"
-fi
+# Simple output structure: scans/, summaries/, logs/ directly under output/
+LOCAL_OUTPUT="${OUTPUT_BASE:-$(pwd)/output}"
+SCANS_DIR="$LOCAL_OUTPUT/scans"
+SUMMARIES_DIR="$LOCAL_OUTPUT/summaries"
+LOGS_DIR="$LOCAL_OUTPUT/logs"
 
 mkdir -p "$SUMMARIES_DIR" "$LOGS_DIR"
 MANIFEST="$LOGS_DIR/trivy_summary_manifest_${TIMESTAMP}.log"

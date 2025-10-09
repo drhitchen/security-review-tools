@@ -49,19 +49,11 @@ done
 
 timestamp=$(date +%Y%m%d%H%M%S)
 
-# If REPO is provided, we unify with the code-scans folder structure
-if [ -n "$REPO" ]; then
-    local_output="${OUTPUT_BASE:-./output}/code-scans/$REPO"
-    SCANS_DIR="$local_output/scans"
-    SUMMARIES_DIR="$local_output/summaries"
-    LOGS_DIR="$local_output/logs"
-else
-    # Fallback to top-level
-    local_output="${OUTPUT_BASE:-./output}"
-    SCANS_DIR="$(pwd)"
-    SUMMARIES_DIR="$local_output"
-    LOGS_DIR="$local_output"
-fi
+# Simple output structure: scans/, summaries/, logs/ directly under output/
+local_output="${OUTPUT_BASE:-./output}"
+SCANS_DIR="$local_output/scans"
+SUMMARIES_DIR="$local_output/summaries"
+LOGS_DIR="$local_output/logs"
 
 mkdir -p "$SUMMARIES_DIR" "$LOGS_DIR"
 

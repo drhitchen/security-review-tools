@@ -106,6 +106,26 @@ for tool_script in "${tools_to_install[@]}"; do
 done
 
 # ─────────────────────────────────────────────────────────────
+# 🔍 Install KICS queries if KICS was installed
+echo -e "\n🔍 Installing KICS queries..."
+if command -v kics >/dev/null 2>&1; then
+    cd "${TARGET_DIR}/scan-code"
+    if [ -f "install-kics-queries.sh" ]; then
+        echo "📦 Installing KICS queries to local directory..."
+        ./install-kics-queries.sh --local
+    else
+        echo "⚠️  KICS queries installer not found, creating assets directory manually..."
+        mkdir -p assets && cd assets
+        git clone --depth 1 https://github.com/Checkmarx/kics.git temp-kics
+        cp -r temp-kics/assets/queries .
+        rm -rf temp-kics
+        echo "✅ KICS queries installed to local assets directory"
+    fi
+else
+    echo "⚠️  KICS not found, skipping queries installation"
+fi
+
+# ─────────────────────────────────────────────────────────────
 # ✅ Manual authentication reminders
 echo -e "\n🔐 Final step: log in to tools that require auth."
 echo "➡️ Run this to log into Semgrep:"

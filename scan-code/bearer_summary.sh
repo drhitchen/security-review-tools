@@ -49,19 +49,11 @@ done
 
 timestamp=$(date +%Y%m%d%H%M%S)
 
-# If a repo is provided, unify with code-scans folder structure
-if [ -n "$REPO_NAME" ]; then
-    LOCAL_OUTPUT="${OUTPUT_BASE:-./output}/code-scans/$REPO_NAME"
-    SCANS_DIR="$LOCAL_OUTPUT/scans"
-    SUMMARIES_DIR="$LOCAL_OUTPUT/summaries"
-    LOGS_DIR="$LOCAL_OUTPUT/logs"
-else
-    # Fallback if no repo specified
-    LOCAL_OUTPUT="${OUTPUT_BASE:-./output}"
-    SCANS_DIR="$LOCAL_OUTPUT"
-    SUMMARIES_DIR="$LOCAL_OUTPUT"
-    LOGS_DIR="$LOCAL_OUTPUT"
-fi
+# Simple output structure: scans/, summaries/, logs/ directly under output/
+LOCAL_OUTPUT="${OUTPUT_BASE:-./output}"
+SCANS_DIR="$LOCAL_OUTPUT/scans"
+SUMMARIES_DIR="$LOCAL_OUTPUT/summaries" 
+LOGS_DIR="$LOCAL_OUTPUT/logs"
 
 mkdir -p "$SUMMARIES_DIR" "$LOGS_DIR"
 
@@ -81,15 +73,30 @@ if [ -n "$BEARER_FILE" ]; then
     # If user provided -f, just process that single file
     files_to_process+=("$BEARER_FILE")
 elif [ -n "$REPO_NAME" ]; then
-    # No -f, but we have a repo name => auto-discover all matching JSON
+    # No -f, but we have a repo name => auto-discover all matching JSON  
+    # First, try with the basename of the repo path (in case it's a full path)
+    REPO_BASENAME=$(basename "$REPO_NAME")
+    
+    # Try finding with full repo name first, sort by modification time (newest first)
     while IFS= read -r line; do
-        files_to_process+=("$line")
-    done < <( find "$SCANS_DIR" -maxdepth 1 -type f -name "${REPO_NAME}.bearer_*.json" 2>/dev/null \
-              | xargs ls -t 2>/dev/null || true )
+        [ -n "$line" ] && files_to_process+=("$line")
+    done < <( find "$SCANS_DIR" -maxdepth 1 -type f -name "${REPO_NAME}.bearer_*.json" -printf '%T@ %p\n' 2>/dev/null \
+              | sort -rn | cut -d' ' -f2- || true )
+    
+    # If no files found and repo name looks like a path, try with just the basename
+    if [ ${#files_to_process[@]} -eq 0 ] && [ "$REPO_NAME" != "$REPO_BASENAME" ]; then
+        while IFS= read -r line; do
+            [ -n "$line" ] && files_to_process+=("$line")
+        done < <( find "$SCANS_DIR" -maxdepth 1 -type f -name "${REPO_BASENAME}.bearer_*.json" -printf '%T@ %p\n' 2>/dev/null \
+                  | sort -rn | cut -d' ' -f2- || true )
+    fi
 
     if [ ${#files_to_process[@]} -eq 0 ]; then
-        echo "No Bearer JSON found in $SCANS_DIR for '$REPO_NAME'. Provide -f or place files matching ${REPO_NAME}.bearer_*.json."
-        usage
+        log "No Bearer JSON found in $SCANS_DIR for '$REPO_NAME' (or '$REPO_BASENAME')"
+        log "Looking for files matching: ${REPO_NAME}.bearer_*.json or ${REPO_BASENAME}.bearer_*.json"
+        log "Available Bearer files: $(find "$SCANS_DIR" -maxdepth 1 -name "*.bearer_*.json" 2>/dev/null | head -5 | tr '\n' ' ')"
+        log "Skipping Bearer summary - no matching files found."
+        exit 0
     fi
 else
     # Neither -f nor -r => can't auto-discover

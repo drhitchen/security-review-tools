@@ -67,9 +67,13 @@ REPO="${REPO%/}"
 
 # Determine a default output location if not provided
 REPO_BASENAME="$(basename "$REPO")"
-OUTPUT_ROOT="${OUTPUT_BASE:-$(pwd)/output/code-scans/$REPO_BASENAME}"
+# Handle special case where REPO is "." or similar
+if [[ "$REPO_BASENAME" == "." || "$REPO_BASENAME" == ".." ]]; then
+    REPO_BASENAME="$(basename "$(realpath "$REPO")")"
+fi
+OUTPUT_ROOT="${OUTPUT_BASE:-$(pwd)/output}"
 
-# We'll store raw scans in "scans/", summaries in "summaries/", logs in "logs/"
+# Simple structure: scans/, summaries/, logs/ directly under output/
 SCANS_DIR="$OUTPUT_ROOT/scans"
 SUMMARIES_DIR="$OUTPUT_ROOT/summaries"
 LOGS_DIR="$OUTPUT_ROOT/logs"
@@ -83,14 +87,17 @@ MANIFEST="$LOGS_DIR/scan_manifest_${TIMESTAMP}.log"
 # Dynamically resolve the KICS queries path for Linux installation
 get_kics_queries_path() {
     local queries_path=""
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    # Check common Linux installation paths for KICS queries
+    # Check common paths for KICS queries, prioritizing our preferred locations
     local possible_paths=(
-        "/usr/local/share/kics/assets/queries"
-        "/opt/kics/assets/queries"
-        "/usr/share/kics/assets/queries"
-        "$HOME/go/src/github.com/Checkmarx/kics/assets/queries"
-        "$HOME/.local/share/kics/assets/queries"
+        "$script_dir/assets/queries"                           # Local to scan-code script (highest priority)
+        "./assets/queries"                                     # Relative to current directory  
+        "/usr/local/share/kics/assets/queries"                # System install (enhanced installer)
+        "/opt/kics/assets/queries"                            # Alternative system path
+        "/usr/share/kics/assets/queries"                      # Package manager installs
+        "$HOME/go/src/github.com/Checkmarx/kics/assets/queries"  # Go workspace
+        "$HOME/.local/share/kics/assets/queries"              # User-local install
     )
 
     for path in "${possible_paths[@]}"; do
@@ -118,6 +125,20 @@ get_kics_queries_path() {
     else
         echo "Error: Unable to locate KICS queries directory." >&2
         echo "Searched paths: ${possible_paths[*]}" >&2
+        echo "" >&2
+        echo "KICS queries need to be downloaded separately. Choose one of these options:" >&2
+        echo "" >&2
+        echo "Option 1 - Download queries to local directory (recommended for this script):" >&2
+        echo "  cd $(dirname "${BASH_SOURCE[0]}") && mkdir -p assets && cd assets && git clone --depth 1 https://github.com/Checkmarx/kics.git temp-kics && cp -r temp-kics/assets/queries . && rm -rf temp-kics" >&2
+        echo "" >&2
+        echo "Option 2 - Use KICS Docker image (includes queries):" >&2
+        echo "  docker pull checkmarx/kics:latest" >&2
+        echo "  docker run -t -v \"\$(pwd):/path\" checkmarx/kics:latest scan -p /path -o \"/path/\"" >&2
+        echo "" >&2
+        echo "Option 3 - Install to system directory (requires root):" >&2
+        echo "  sudo mkdir -p /usr/local/share/kics/assets" >&2
+        echo "  cd /tmp && git clone --depth 1 https://github.com/Checkmarx/kics.git && sudo cp -r kics/assets/queries /usr/local/share/kics/assets/ && rm -rf kics" >&2
+        echo "" >&2
         return 1
     fi
 }
@@ -192,11 +213,13 @@ run_trufflehog() {
     local outfile_json="$SCANS_DIR/${REPO_BASENAME}.trufflehog_secrets.json"
     log "Running: TruffleHog on $REPO"
 
-    local cmd1="trufflehog filesystem \"$REPO\" --only-verified"
+    #local cmd1="trufflehog filesystem \"$REPO\" --only-verified --no-update"
+    local cmd1="trufflehog filesystem \"$REPO\" --no-update"
     log "Debug: Executing command -> $cmd1"
     eval "$cmd1" | tee "$outfile_txt"
 
-    local cmd2="trufflehog filesystem \"$REPO\" --only-verified --json"
+    #local cmd2="trufflehog filesystem \"$REPO\" --only-verified --json --no-update"
+    local cmd2="trufflehog filesystem \"$REPO\" --json --no-update"
     log "Debug: Executing command -> $cmd2"
     eval "$cmd2" | tee "$outfile_json"
 }
@@ -214,9 +237,11 @@ run_checkov() {
 
     log "Running: Checkov on $REPO"
     local cmd="checkov --directory \"$REPO\" --skip-path docs \
-        -o cli -o json --output-file-path \"$outfile_txt\",\"$outfile_json\" --quiet"
+        -o cli -o json --output-file-path \"$outfile_txt\",\"$outfile_json\" "
     log "Debug: Executing command -> $cmd"
     eval "$cmd"
+    # Checkov returns non-zero when vulnerabilities are found, but this is expected
+    return 0
 }
 
 run_kics() {
@@ -236,7 +261,17 @@ run_kics() {
     local outbase="$SCANS_DIR/${REPO_BASENAME}.kics"
     log "Running: KICS on $REPO"
 
-    local cmd="KICS_COLLECT_TELEMETRY=0 kics scan -p \"${PWD}/$REPO\" -o \"$SCANS_DIR\" --queries-path \"$queries_path\" --no-progress --output-name \"${REPO_BASENAME}.kics\" \\
+    # Determine the correct path to scan
+    local scan_path
+    if [[ "$REPO" == /* ]]; then
+        # Absolute path - use as is
+        scan_path="$REPO"
+    else
+        # Relative path - prepend PWD
+        scan_path="${PWD}/$REPO"
+    fi
+
+    local cmd="KICS_COLLECT_TELEMETRY=0 kics scan -p \"$scan_path\" -o \"$SCANS_DIR\" --queries-path \"$queries_path\" --no-progress --output-name \"${REPO_BASENAME}.kics\" \\
         --preview-lines 30 --report-formats csv,html,json,sarif"
     log "Debug: Executing command -> $cmd"
     eval "$cmd"
@@ -259,10 +294,11 @@ run_semgrep() {
         --quiet --dataflow-traces --no-force-color \
         --text --output=\"${outbase}.txt\" \
         --json-output=\"${outbase}.json\" \
-        --metrics=\"off\" \
         --sarif-output=\"${outbase}.sarif\""
     log "Debug: Executing command -> $cmd"
     eval "$cmd"
+    # Semgrep returns non-zero when vulnerabilities are found, but this is expected
+    return 0
 }
 
 run_trivy() {
@@ -277,13 +313,23 @@ run_trivy() {
     local outfile_json="$SCANS_DIR/${REPO_BASENAME}.trivy.json"
     log "Running: Trivy (file system scan) on $REPO"
 
+    # Determine the correct path to scan
+    local scan_path
+    if [[ "$REPO" == /* ]]; then
+        # Absolute path - use as is
+        scan_path="$REPO"
+    else
+        # Relative path - prepend PWD
+        scan_path="${PWD}/$REPO"
+    fi
+
     # Table output
-    local cmd1="trivy fs \"${PWD}/$REPO\" --format table"
+    local cmd1="trivy fs \"$scan_path\" --format table"
     log "Debug: Executing command -> $cmd1"
     eval "$cmd1" | tee "$outfile_txt"
 
     # JSON output
-    local cmd2="trivy fs \"${PWD}/$REPO\" --format json"
+    local cmd2="trivy fs \"$scan_path\" --format json"
     log "Debug: Executing command -> $cmd2"
     eval "$cmd2" | tee "$outfile_json"
 }
@@ -308,6 +354,8 @@ run_snyk() {
     local cmd2="snyk code test \"$REPO\" --sarif-file-output=\"${outbase}.sarif\""
     log "Debug: Executing command -> $cmd2"
     eval "$cmd2"
+    # Snyk returns non-zero when vulnerabilities are found, but this is expected
+    return 0
 }
 
 run_bearer() {
@@ -365,6 +413,8 @@ run_terrascan() {
     eval "$cmd2" | tee "$outfile_json"
 
     popd >/dev/null 2>&1
+    # Terrascan returns non-zero when vulnerabilities are found, but this is expected
+    return 0
 }
 
 ###############################################################################
@@ -392,19 +442,52 @@ for t in "${TOOLS[@]}"; do
 done
 log "Resolved tool list: ${UNIQUE_TOOLS[*]}"
 
+# Track which tools were actually executed successfully
+EXECUTED_TOOLS=()
+
 # Run each requested tool
 for tool in "${UNIQUE_TOOLS[@]}"; do
     case "$tool" in
-        scc)             run_scc ;;
-        detect-secrets)  run_detect_secrets ;;
-        trufflehog)      run_trufflehog ;;
-        checkov)         run_checkov ;;
-        kics)            run_kics ;;
-        semgrep)         run_semgrep ;;
-        trivy)           run_trivy ;;
-        snyk)            run_snyk ;;
-        bearer)          run_bearer ;;
-        terrascan)       run_terrascan ;;  # not in 'all' by default
+        scc)             
+            if run_scc; then 
+                EXECUTED_TOOLS+=("scc")
+            fi ;;
+        detect-secrets)  
+            if run_detect_secrets; then 
+                EXECUTED_TOOLS+=("detect-secrets")
+            fi ;;
+        trufflehog)      
+            if run_trufflehog; then 
+                EXECUTED_TOOLS+=("trufflehog")
+            fi ;;
+        checkov)         
+            if run_checkov; then 
+                EXECUTED_TOOLS+=("checkov")
+            fi ;;
+        kics)            
+            if run_kics; then 
+                EXECUTED_TOOLS+=("kics")
+            fi ;;
+        semgrep)         
+            if run_semgrep; then 
+                EXECUTED_TOOLS+=("semgrep")
+            fi ;;
+        trivy)           
+            if run_trivy; then 
+                EXECUTED_TOOLS+=("trivy")
+            fi ;;
+        snyk)            
+            if run_snyk; then 
+                EXECUTED_TOOLS+=("snyk")
+            fi ;;
+        bearer)          
+            if run_bearer; then 
+                EXECUTED_TOOLS+=("bearer")
+            fi ;;
+        terrascan)       
+            if run_terrascan; then 
+                EXECUTED_TOOLS+=("terrascan")
+            fi ;;  # not in 'all' by default
         *)
             log "Warning: Unknown tool '$tool' - skipping."
             ;;
@@ -421,24 +504,52 @@ if [ -f "$SCANS_DIR/${REPO_BASENAME}.semgrep.txt" ]; then
         "$SCANS_DIR/${REPO_BASENAME}.semgrep.nocolor.txt"
 fi
 
+log "Tools successfully executed: ${EXECUTED_TOOLS[*]}"
+
 ###############################################################################
 # Summaries or Post-Processing
 ###############################################################################
 log "Starting summary scripts..."
 
-# Verify summarize_scans.sh is in the same directory as this script or in PATH
+# Get script directory for locating summary scripts
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -x "$SCRIPT_DIR/summarize_scans.sh" ]; then
-    SUMMARIZE_SCRIPT="$SCRIPT_DIR/summarize_scans.sh"
-elif command -v summarize_scans.sh &> /dev/null; then
-    SUMMARIZE_SCRIPT="summarize_scans.sh"
-else
-    log "Error: summarize_scans.sh is not found in $SCRIPT_DIR or PATH."
-    return 1
-fi
 
-log "Running: summarize_scans.sh on $REPO scan results"
-"$SUMMARIZE_SCRIPT" -r "${REPO}" -o "${OUTPUT_ROOT}"
+# Run summary scripts only for tools that were executed
+for tool in "${EXECUTED_TOOLS[@]}"; do
+    # Map tool names to their corresponding summary scripts
+    case "$tool" in
+        checkov)
+            summary_script="$SCRIPT_DIR/checkov_summary.sh"
+            ;;
+        semgrep)
+            summary_script="$SCRIPT_DIR/semgrep_summary.sh"
+            ;;
+        trivy)
+            summary_script="$SCRIPT_DIR/trivy_summary.sh"
+            ;;
+        snyk)
+            summary_script="$SCRIPT_DIR/snyk_summary.sh"
+            ;;
+        bearer)
+            summary_script="$SCRIPT_DIR/bearer_summary.sh"
+            ;;
+        terrascan)
+            summary_script="$SCRIPT_DIR/terrascan_summary.sh"
+            ;;
+        *)
+            # Some tools don't have summary scripts (scc, detect-secrets, trufflehog, kics)
+            log "No summary script available for tool: $tool"
+            continue
+            ;;
+    esac
+    
+    if [[ -x "$summary_script" ]]; then
+        log "Running: $(basename "$summary_script") for $tool scan results"
+        "$summary_script" -r "${REPO_BASENAME}" -o "${OUTPUT_ROOT}"
+    else
+        log "Warning: Summary script $(basename "$summary_script") is not found or not executable."
+    fi
+done
 
 # Verify fabric_reports.sh is available
 if [ -x "$SCRIPT_DIR/fabric_reports.sh" ]; then

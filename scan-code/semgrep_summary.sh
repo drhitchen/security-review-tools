@@ -52,7 +52,7 @@ done
 timestamp=$(date +%Y%m%d%H%M%S)
 
 if [ -n "$REPO" ]; then
-    local_output="${OUTPUT_BASE:-./output}/code-scans/$REPO"
+    local_output="${OUTPUT_BASE:-./output}"
     SCANS_DIR="$local_output/scans"
     SUMMARIES_DIR="$local_output/summaries"
     LOGS_DIR="$local_output/logs"
