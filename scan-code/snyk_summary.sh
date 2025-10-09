@@ -24,8 +24,8 @@ Examples:
   # Summarize a known Snyk SARIF file with custom base dir:
   ./snyk_summary.sh -f ./path/to/my.snyk.sarif -r myrepo -o /custom/output
 
-  # Auto-discover Snyk file under code-scans/fintive-core/scans:
-  ./snyk_summary.sh -r fintive-core
+  # Auto-discover Snyk file under code-scans/my-app/scans:
+  ./snyk_summary.sh -r my-app
 EOF
     exit 1
 }

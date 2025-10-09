@@ -15,13 +15,13 @@ Usage: $0 [options]
   -o <base_dir>          Base output directory (default: ./output/code-scans/<repo_name>)
 
 Examples:
-  # Summarize an existing text and JSON result for repo "fintive-core"
-  ./trivy_summary.sh -f ./output/code-scans/fintive-core/scans/fintive-core.trivy.txt \\
-                     -j ./output/code-scans/fintive-core/scans/fintive-core.trivy.json \\
-                     -r fintive-core
+  # Summarize an existing text and JSON result for repo "my-app"
+  ./trivy_summary.sh -f ./output/code-scans/my-app/scans/my-app.trivy.txt \\
+                     -j ./output/code-scans/my-app/scans/my-app.trivy.json \\
+                     -r my-app
 
   # Summarize with auto-discovery
-  ./trivy_summary.sh -r fintive-core
+  ./trivy_summary.sh -r my-app
 
   # Summarize with custom base path
   ./trivy_summary.sh -j myrepo.trivy.json -r myrepo -o /custom/path

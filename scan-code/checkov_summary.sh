@@ -17,14 +17,14 @@ Usage: $0 [options]
 If -r is not provided, we fallback to placing summaries in ./output.
 
 Examples:
-  # Summarize existing files in code-scans/fintive-core, using the default location:
-  ./checkov_summary.sh -f fintive-core.checkov.txt -j fintive-core.checkov.json -r fintive-core
+  # Summarize existing files in code-scans/my-app, using the default location:
+  ./checkov_summary.sh -f my-app.checkov.txt -j my-app.checkov.json -r my-app
 
   # Summarize logs in the current directory (no repo specified, fallback to ./output):
   ./checkov_summary.sh -f my.checkov.txt -j my.checkov.json
 
-  # Let the script auto-find checkov.txt / checkov.json in code-scans/fintive-core/scans/:
-  ./checkov_summary.sh -r fintive-core
+  # Let the script auto-find checkov.txt / checkov.json in code-scans/my-app/scans/:
+  ./checkov_summary.sh -r my-app
 EOF
     exit 1
 }

@@ -26,8 +26,8 @@ Examples:
   # Summarize a semgrep SARIF with a custom base dir
   ./semgrep_summary.sh -f myrepo.semgrep.sarif -r myrepo -o /custom/output
 
-  # Auto-find semgrep.* under code-scans/fintive-core/scans
-  ./semgrep_summary.sh -r fintive-core
+  # Auto-find semgrep.* under code-scans/my-app/scans
+  ./semgrep_summary.sh -r my-app
 EOF
     exit 1
 }
